@@ -12,13 +12,14 @@
 var builder = require("botbuilder");
 var botbuilder_azure = require("botbuilder-azure");
 var path = require('path');
+const spellService = require('./spell-service');
 var dotenvextended = require('dotenv-extended');
 
 dotenvextended.load();
 
 var useEmulator = (process.env.NODE_ENV == 'development');
 
-var HelpMessage = '\nI\'m Muffin, your friendly catbot, and I can help you with checking availability & answering questions about Timandra Motel facilities.';
+var HelpMessage = '\nI\'m Muffin, the motel catbot (meiow)!  I can help you with checking availability & answering questions about Timandra Motel facilities.';
 var UserNameKey = 'UserName';
 var UserWelcomedKey = 'UserWelcomed';
 
@@ -43,16 +44,7 @@ var inMemoryStorage = new builder.MemoryBotStorage();
 // This default message handler is invoked if the user's utterance doesn't
 // match any intents handled by other dialogs.
 var bot = new builder.UniversalBot(connector, function (session, args) {
-    //session.send('You reached the default message handler. You said \'%s\'.', session.message.text);
-    session.send('This is the start message for a bot');
-
-    if (!session.userData[UserNameKey]) {
-        return session.beginDialog('GreetingDialog');
-    }
-
-    if (!session.privateConversationData[UserWelcomedKey]) {
-        session.send('%s', HelpMessage);
-    }
+    session.send('Sorry I didn\'t understand, I\'m not too bright, but I am learning. You said \'%s\'.', session.message.text);
 
 });
 
@@ -73,24 +65,29 @@ bot.recognizer(recognizer);
 // Greet dialog
 bot.dialog('GreetingDialog', new builder.SimpleDialog(function (session, results) {
     if (results && results.response) {
-
-        if (!session.privateConversationData[UserWelcomedKey]) {
-            session.userData[UserNameKey] = results.response;
-            session.privateConversationData[UserWelcomedKey] = true;
-            return session.endDialog('Hello %s! %s', results.response, HelpMessage);
-        }
-        else
-        {
-            return session.endDialog('Hello %s!', results.response);
-        }
+        session.userData[UserNameKey] = results.response;
+        return session.endDialog('Hello %s, how can I help you today?', results.response);
     }
 
     if (!session.userData[UserNameKey]) {
         builder.Prompts.text(session, 'Before get started, please tell me your name?');
     }
+
 })).triggerAction({
     matches: 'Greeting'
 });
+
+
+// Bot introduces itself and says hello upon conversation start
+bot.on('conversationUpdate', (message) => {    
+    if (message.membersAdded[0].id === message.address.bot.id) {             
+          var reply = new builder.Message()    
+                .address(message.address)    
+                .text('Hello, %s', HelpMessage);
+          bot.send(reply);    
+          bot.beginDialog(message.address,'GreetingDialog');
+    }
+ });
 
 // example sending a video
 bot.dialog('ThingsToDo',
@@ -113,7 +110,7 @@ bot.dialog('ThingsToDo',
                 builder.CardAction.openUrl(session, 'https://www.youtube.com/watch?v=AscXhaEaRvA', 'Watch on Youtube')
             ]);
         
-        const msg = new builder.Message(session).addAttachment(card)
+        const msg = new builder.Message(session).addAttachment(card);
         session.send(msg);
         session.endDialog();
     }
@@ -133,17 +130,44 @@ bot.dialog('HelpDialog',
 bot.dialog('CheckAvailability',
     (session, args) => {
         console.log(JSON.stringify(args.intent, undefined, 2))
-        session.send('You reached the Check Availability intent. You said \'%s\'.', session.message.text);
+
+        // how to speak (no way!) this fails as the bot needs to be registered, though:
+        session.say("Please hold whilst I think about what I need to check availability");
 
         // do something with the intents
-        var checkInDate = builder.EntityRecognizer.findEntity(args.intent.entities, 'Date.CheckIn');
-        var reply = `It looks like you want to arrive ${checkInDate.entity}`;
-        session.send(reply);
+
+        // find a specific entity
+        // var checkInDate = builder.EntityRecognizer.findEntity(args.intent.entities, 'Date.CheckIn');
+        // var reply = `It looks like you want to arrive ${checkInDate.entity}`;
+        // session.send(reply);
+
+        // resolve the dates
+        var checkInDate = builder.EntityRecognizer.resolveTime(args.intent.entities);
+        console.log(checkInDate);
+
         session.endDialog();
     }
 ).triggerAction({
     matches: 'CheckAvailability'
 }) 
+
+// Spell Check
+if (process.env.IS_SPELL_CORRECTION_ENABLED === 'true') {
+    bot.use({
+        botbuilder: (session, next) => {
+            spellService
+                .getCorrectedText(session.message.text)
+                .then(text => {
+                    session.message.text = text;
+                    next();
+                })
+                .catch(error => {
+                    console.error(error);
+                    next();
+                });
+        }
+    });
+}
 
 if (useEmulator) {
     var restify = require('restify');
