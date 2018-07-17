@@ -141,11 +141,73 @@ bot.dialog('CheckAvailability',
         // var reply = `It looks like you want to arrive ${checkInDate.entity}`;
         // session.send(reply);
 
-        // resolve the dates
-        var checkInDate = builder.EntityRecognizer.resolveTime(args.intent.entities);
-        console.log(checkInDate);
+        const dateEntities = builder.EntityRecognizer.findAllEntities(args.intent.entities, 'builtin.datetimeV2.date');
+        const dateRangeEntities = builder.EntityRecognizer.findAllEntities(args.intent.entities, 'builtin.datetimeV2.daterange');
+        const roomType = builder.EntityRecognizer.findAllEntities(args.intent.entities, 'Room.Type');
 
-        session.endDialog();
+        if (dateRangeEntities.length > 0)
+        {
+            var dateRanges = new Array()
+            dateRangeEntities.forEach(item => {
+                if( new Date(item.resolution.values['start']) >
+                    new Date() && 
+                    new Date(item.resolution.values['end']) >
+                    new Date()) 
+                {
+                    dateRanges.push.apply(dateRanges, item.resolution.values)
+                }
+
+            })
+            session.dialogData.checkin = dateRangeEntities[0].resolution.values['start']
+            session.dialogData.checkout = dateRangeEntities[0].resolution.values['end']
+        }
+        else if (dateEntities.length > 0)
+        {
+            // pull value property out of values object in resolution array
+            
+            /*
+            var dates = new Array();
+            dateEntities.forEach((item) => {
+
+                const futureDates = item.resolution.values.map(a => a.value).filter(
+                    // only keep dates in the future.  e.g. LUIS will think "Thursday" could mean next or last Thursday
+                    date => new Date(date) > new Date()
+                )
+                dates.push.apply(dates, futureDates);
+
+            });*/
+
+            var futureDates = new Array();
+            dateEntities.forEach( entity => {
+                futureDates.push(
+                    // only keep dates in the future.  e.g. LUIS will think "Thursday" could mean next or last Thursday
+                    entity.resolution.values.map(a => a.value).filter((item) => 
+                        new Date(item) > new Date()
+                    )
+                );
+            });
+
+            //var dates = dateEntities[0].resolution.values.map(a => a.value)
+            //const futureDates = dates.filter( date => new Date(date) > new Date() ).sort()
+            
+            if (futureDates.length == 0)
+            {
+                //drat
+            }
+            else if (futureDates.length == 1)
+            {
+                session.dialogData.checkin = futureDates[0]
+                // now need to check if number of nights was specified
+
+            }
+            else if (futureDates.length > 1)
+            {
+                session.dialogData.checkin = futureDates[0]
+                session.dialogData.checkin = futureDates[futureDates.length]
+            }
+        }
+
+
     }
 ).triggerAction({
     matches: 'CheckAvailability'

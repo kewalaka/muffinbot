@@ -9,7 +9,7 @@
                 "type": "node",
                 "request": "launch",
                 "program": "${workspaceRoot}/messages/index.js",
-                "cwd": "${workspaceRoot}",
+                "cwd": "${workspaceRoot}/messages",
                 "env": {
                     "NODE_ENV": "development",
                     // "LuisAppId": "",
